@@ -16,7 +16,7 @@
 
 Релиз собирается на GitHub Actions: HTML упаковывается во встроенный WebView (браузер телефона) и подписывается. Готовый файл лежит в [Releases](https://github.com/LuntikVisuals/do-siren/releases).
 
-`com.luntikvisuals.dosiren`, versionCode 1, Android 7.0+.
+`com.luntikvisuals.dosiren`, versionCode 2, Android 7.0+. Поверх 1.0.0 встаёт та же подпись.
 
 ## Фан-трибьют
 

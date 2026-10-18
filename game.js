@@ -56,7 +56,8 @@ let joyOn = false, jx = 0, jy = 0, joyPtr = -1;
 let actionHeld = false, altHeld = false;
 let actionEdge = false, altEdge = false, attackEdge = false;
 let eWas = false, fWas = false, spaceWas = false;
-let viewW = 360, viewH = 640, dpr = 1;
+let viewW = 360, viewH = 640, dpr = 1, VS = 1;
+let frameShakeX = 0, frameShakeY = 0;
 let actx = null, drone = null;
 let heartAcc = 0;
 let lastTs = 0, acc = 0;
@@ -1043,11 +1044,40 @@ function updateHud() {
   mini.style.display = showMini ? "block" : "none";
 }
 
+function shade(hex, amt) {
+  const n = parseInt(String(hex).replace("#", ""), 16);
+  if (!Number.isFinite(n)) return hex;
+  let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const f = amt < 0 ? 0 : 255;
+  const t = Math.min(1, Math.abs(amt));
+  r = Math.round(r + (f - r) * t);
+  g = Math.round(g + (f - g) * t);
+  b = Math.round(b + (f - b) * t);
+  return "rgb(" + r + "," + g + "," + b + ")";
+}
+
+/* Камера как в вертикали: кусок мира фиксирован, персонажи не сжимаются в точки.
+   Та же идея, что VS в «Заводных кошмарах» (там высота ландшафта / 380),
+   только срез подобран под портрет. */
+function fitView() {
+  const portrait = viewH + 12 >= viewW;
+  const charPx = portrait ? viewH * 0.058 : Math.min(viewW, viewH) * 0.07;
+  VS = charPx / 30;
+  let tilesW = viewW / VS / T;
+  if (tilesW < 5.6) VS = viewW / (T * 5.6);
+  if (tilesW > 9.2) VS = viewW / (T * 9.2);
+  const tilesH = viewH / VS / T;
+  if (portrait && tilesH > 13.5) VS = viewH / (T * 13.5);
+  if (!portrait && tilesH < 7.2) VS = viewH / (T * 7.2);
+  VS = clamp(VS, 0.7, 8);
+}
+
 function resize() {
   const r = $("app").getBoundingClientRect();
   dpr = Math.min(2, window.devicePixelRatio || 1);
-  viewW = r.width;
-  viewH = r.height;
+  viewW = Math.max(1, r.width);
+  viewH = Math.max(1, r.height);
+  fitView();
   canvas.width = Math.max(1, Math.floor(viewW * dpr));
   canvas.height = Math.max(1, Math.floor(viewH * dpr));
   lightCanvas.width = canvas.width;
@@ -1064,20 +1094,25 @@ function render() {
     ctx.fillRect(0, 0, viewW, viewH);
     return;
   }
-  const tx = clamp(player.x - viewW / 2, 0, Math.max(0, WORLD_W - viewW));
-  const ty = clamp(player.y - viewH * 0.46, 0, Math.max(0, WORLD_H - viewH));
+  const worldW = viewW / VS;
+  const worldH = viewH / VS;
+  const tx = clamp(player.x - worldW / 2, 0, Math.max(0, WORLD_W - worldW));
+  const ty = clamp(player.y - worldH * 0.42, 0, Math.max(0, WORLD_H - worldH));
   camX += (tx - camX) * 0.18;
   camY += (ty - camY) * 0.18;
-  ctx.save();
+  frameShakeX = 0;
+  frameShakeY = 0;
   if (shake > 0.4) {
-    ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+    frameShakeX = (Math.random() - 0.5) * shake;
+    frameShakeY = (Math.random() - 0.5) * shake;
     shake *= 0.86;
   }
-  ctx.translate(-camX, -camY);
+  const sc = dpr * VS;
+  ctx.setTransform(sc, 0, 0, sc, -camX * sc + frameShakeX * dpr, -camY * sc + frameShakeY * dpr);
   const x0 = Math.max(0, Math.floor(camX / T) - 1);
   const y0 = Math.max(0, Math.floor(camY / T) - 1);
-  const x1 = Math.min(COLS - 1, Math.ceil((camX + viewW) / T) + 1);
-  const y1 = Math.min(ROWS - 1, Math.ceil((camY + viewH) / T) + 1);
+  const x1 = Math.min(COLS - 1, Math.ceil((camX + worldW) / T) + 1);
+  const y1 = Math.min(ROWS - 1, Math.ceil((camY + worldH) / T) + 1);
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       if (solid[y][x] && deco[y][x] !== "pool") continue;
@@ -1102,7 +1137,7 @@ function render() {
     ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
     ctx.globalAlpha = 1;
   }
-  ctx.restore();
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   drawDark();
   if (police < 14 && mode === "play") {
     ctx.fillStyle = Math.floor(performance.now() / 180) % 2 === 0 ? "rgba(40,70,180,.14)" : "rgba(160,30,30,.14)";
@@ -1280,7 +1315,6 @@ function drawProps() {
 }
 function drawActor(a) {
   if (!a.alive && a.kind === "killer") return;
-  const k = killer();
   if (a.hiding && a !== player) {
     if (player.kind === "killer" && dist(player, a) > 42) return;
   }
@@ -1289,96 +1323,167 @@ function drawActor(a) {
   ctx.save();
   ctx.translate(sx, sy);
   ctx.globalAlpha = !a.alive ? 0.4 : a.hiding ? 0.45 : 1;
-  ctx.fillStyle = "rgba(0,0,0,.35)";
-  ctx.beginPath();
-  ctx.ellipse(0, 10, 11, 5, 0, 0, 7);
-  ctx.fill();
-  ctx.rotate(a.facing);
-  const bob = Math.sin(a.step) * 2;
-  ctx.fillStyle = "#1a1a1a";
-  ctx.fillRect(-8, -5 + bob, 5, 4);
-  ctx.fillRect(-8, 2 - bob, 5, 4);
-  if (a.kind === "killer") ctx.fillStyle = a.persona === "jason" ? "#1c3a2c" : a.persona === "myers" ? "#1a1c24" : "#0c0c10";
-  else ctx.fillStyle = a.color;
-  roundRect(ctx, -6, -7, 14, 14, 4);
-  ctx.fill();
-  ctx.fillStyle = a.kind === "killer" ? "#e6e1d8" : skin(a);
-  ctx.beginPath();
-  ctx.arc(9, 0, 6.2, 0, 7);
-  ctx.fill();
-  if (a.kind === "survivor") {
-    ctx.fillStyle = a.hair;
-    ctx.beginPath();
-    ctx.arc(9, -2, 6.2, Math.PI, 0);
-    ctx.fill();
-  } else drawMask(a);
-  if (a.kind === "killer") {
-    ctx.strokeStyle = "#d5d8dc";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    const ext = a.atkAnim > 0 ? 26 : 20;
-    ctx.moveTo(12, 4);
-    ctx.lineTo(ext, 7);
-    ctx.stroke();
-  }
-  if (a.iFrame > 0.2) {
-    ctx.fillStyle = "rgba(255,255,255,.65)";
-    ctx.beginPath();
-    ctx.arc(2, 0, 12, 0, 7);
-    ctx.fill();
-  }
+  if (a.kind === "killer") drawKillerBody(a);
+  else drawSurvivorBody(a);
   ctx.restore();
   if (a.alive && (!a.hiding || a === player || player.kind === "survivor")) {
-    const near = dist(player, a) < 110;
+    const near = dist(player, a) < 150;
     if (a === player || a.kind === "killer" || near) {
       ctx.globalAlpha = 1;
       ctx.fillStyle = a.kind === "killer" ? "#e07070" : "#f0e2c8";
-      ctx.font = "12px Palatino, Georgia, serif";
+      ctx.font = "8px Palatino, Georgia, serif";
       ctx.textAlign = "center";
-      ctx.fillText(a === player ? a.name : a.name, sx, sy - 20);
+      ctx.fillText(a.name, sx, sy - 26);
       if (a.kind === "survivor" && (a === player || a.hp < a.maxHp || a.exposed > 0)) {
         ctx.fillStyle = a.exposed > 0 ? "#ff5a4a" : "#e2a15a";
-        ctx.font = "11px Palatino, Georgia, serif";
-        ctx.fillText("♥".repeat(Math.max(0, a.hp)), sx, sy - 32);
+        ctx.font = "9px Palatino, Georgia, serif";
+        ctx.fillText("♥".repeat(Math.max(0, a.hp)), sx, sy - 36);
       }
     }
   }
   ctx.globalAlpha = 1;
 }
-function skin() { return "#e0b394"; }
-function drawMask(a) {
-  if (a.persona === "jason") {
-    ctx.fillStyle = "#f4f4f2";
+function drawSurvivorBody(a) {
+  const S = 1.45;
+  ctx.save();
+  ctx.scale(S, S);
+  ctx.fillStyle = "rgba(0,0,0,.38)";
+  ctx.beginPath();
+  ctx.ellipse(1, 5, 12, 7.2, 0, 0, 7);
+  ctx.fill();
+  ctx.rotate(a.facing);
+  const step = Math.sin(a.step) * 3.4;
+  ctx.fillStyle = "#1a1a22";
+  ctx.beginPath(); ctx.ellipse(step, -5.4, 3.7, 2.6, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-step, 5.4, 3.7, 2.6, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = a.color;
+  ctx.beginPath(); ctx.ellipse(-1, 0, 8, 11, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = shade(a.color, -0.28);
+  ctx.beginPath(); ctx.ellipse(-3.2, 0, 5, 9, 0, 0, 7); ctx.fill();
+  if (a.id === "alice" || a.id === "sarah") {
+    ctx.fillStyle = a.id === "alice" ? "#f0e2c8" : "#d8d8c0";
+    ctx.fillRect(-4, -10, 2, 20);
+  }
+  ctx.fillStyle = "#e0b394";
+  ctx.beginPath(); ctx.arc(6, 7.6, 2.5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(6.6, -6.4, 2.5, 0, 7); ctx.fill();
+  ctx.fillStyle = "#2c2c2c";
+  ctx.fillRect(7.4, -8, 7.2, 3.2);
+  ctx.fillStyle = "#ffe9a0";
+  ctx.fillRect(14, -7.6, 2.1, 2.4);
+  ctx.fillStyle = "#e0b394";
+  ctx.beginPath(); ctx.arc(1, 0, 6.4, 0, 7); ctx.fill();
+  drawHair(a);
+  ctx.restore();
+  if (a.iFrame > 0.2) {
+    ctx.fillStyle = "rgba(255,255,255,.55)";
     ctx.beginPath();
-    ctx.arc(9, 0, 6.2, 0, 7);
+    ctx.arc(2, 0, 16, 0, 7);
     ctx.fill();
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(6, -2, 2, 2);
-    ctx.fillRect(11, -2, 2, 2);
-    ctx.fillStyle = "#8e2f2f";
-    ctx.fillRect(8, 2, 3, 2);
-  } else if (a.persona === "myers") {
-    ctx.fillStyle = "#f7f7f5";
-    ctx.beginPath();
-    ctx.arc(9, 0, 6.2, 0, 7);
-    ctx.fill();
-    ctx.fillStyle = "#3a2a22";
-    ctx.fillRect(5, -6, 8, 4);
-    ctx.fillStyle = "#222";
-    ctx.fillRect(6.5, -1, 2, 3);
-    ctx.fillRect(11, -1, 2, 3);
+  }
+}
+function drawHair(a) {
+  ctx.fillStyle = a.hair;
+  if (a.id === "alice") {
+    ctx.beginPath(); ctx.ellipse(-7, 0, 5.4, 7.4, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, 6.7, Math.PI * 0.42, Math.PI * 1.58); ctx.fill();
+  } else if (a.id === "sarah") {
+    ctx.beginPath(); ctx.arc(-1, 0, 6.8, Math.PI * 0.5, Math.PI * 1.5); ctx.fill();
+    ctx.beginPath(); ctx.arc(-6, 1, 3.3, 0, 7); ctx.fill();
+  } else if (a.id === "daniel") {
+    ctx.beginPath(); ctx.arc(-1, -1, 7, Math.PI * 0.8, Math.PI * 2.2); ctx.fill();
+  } else if (a.id === "jake") {
+    ctx.beginPath(); ctx.arc(0, -1, 6.6, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(-6.2, -1.5, 12.4, 3);
   } else {
-    ctx.fillStyle = "#f4f4f4";
+    ctx.beginPath(); ctx.arc(0, -1, 6.6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill();
+  }
+}
+function drawKillerBody(a) {
+  const S = a.persona === "scream" ? 1.82 : 1.72;
+  ctx.save();
+  ctx.scale(S, S);
+  ctx.fillStyle = "rgba(0,0,0,.48)";
+  ctx.beginPath();
+  ctx.ellipse(2, 7, 16, 11, 0, 0, 7);
+  ctx.fill();
+  ctx.rotate(a.facing + Math.sin(a.step * 2) * 0.03);
+  const step = Math.sin(a.step) * 3.6;
+  const col = a.persona === "jason" ? "#1c3a2c" : a.persona === "myers" ? "#1a1c24" : "#0c0c10";
+  ctx.fillStyle = shade(col, -0.4);
+  ctx.beginPath(); ctx.ellipse(step, -8.5, 5.2, 3.5, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-step, 8.5, 5.2, 3.5, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.ellipse(-2, 0, a.persona === "scream" ? 13 : 12, a.persona === "scream" ? 16 : 14.5, 0, 0, 7);
+  ctx.fill();
+  ctx.fillStyle = shade(col, -0.22);
+  ctx.beginPath(); ctx.ellipse(-5, 0, 7.5, 11, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = shade(col, -0.05);
+  ctx.beginPath(); ctx.arc(7, 12, 4.3, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(7, -12, 4.3, 0, 7); ctx.fill();
+  const ext = a.atkAnim > 0 ? 30 : 21;
+  ctx.strokeStyle = "#d5d8dc";
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(9, 7);
+  ctx.lineTo(ext, 10);
+  ctx.stroke();
+  if (a.persona === "jason") {
+    ctx.fillStyle = "#b7bcc2";
     ctx.beginPath();
-    ctx.ellipse(10, 0, 5, 8, 0, 0, 7);
+    ctx.moveTo(ext - 3, 6.5);
+    ctx.lineTo(ext + 9, 9.5);
+    ctx.lineTo(ext - 2, 14);
+    ctx.closePath();
     ctx.fill();
+  }
+  drawKillerHead(a);
+  ctx.restore();
+}
+function drawKillerHead(a) {
+  if (a.persona === "jason") {
+    ctx.fillStyle = "#f6f6f4";
+    ctx.beginPath(); ctx.arc(8, 0, 8.4, 0, 7); ctx.fill();
+    ctx.strokeStyle = "rgba(40,40,40,.45)";
+    ctx.lineWidth = 0.7;
+    for (let i = -3; i <= 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(3.2, i * 2.1);
+      ctx.lineTo(13.2, i * 2.1);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#161616";
+    ctx.fillRect(4.8, -2.4, 2.6, 2.3);
+    ctx.fillRect(10.2, -2.4, 2.6, 2.3);
+    ctx.fillStyle = "#8e2f2f";
+    ctx.fillRect(7.1, 2.6, 3.4, 2.3);
+  } else if (a.persona === "myers") {
+    ctx.fillStyle = "#3a2a22";
+    ctx.fillRect(1.5, -8.5, 11, 5.5);
+    ctx.fillStyle = "#f7f7f5";
+    ctx.beginPath(); ctx.arc(8, 1, 8.1, 0, 7); ctx.fill();
+    ctx.fillStyle = "#1c1c1c";
+    ctx.fillRect(5.1, -0.2, 2.3, 3.4);
+    ctx.fillRect(10.5, -0.2, 2.3, 3.4);
+  } else {
+    ctx.fillStyle = "#0a0a0e";
+    ctx.beginPath();
+    ctx.moveTo(3, -12);
+    ctx.quadraticCurveTo(-6, 0, 3, 12);
+    ctx.lineTo(9, 8);
+    ctx.quadraticCurveTo(1, 0, 9, -8);
+    ctx.fill();
+    ctx.fillStyle = "#f3f3f3";
+    ctx.beginPath(); ctx.ellipse(11, 0, 6.4, 11, 0, 0, 7); ctx.fill();
     ctx.fillStyle = "#111";
     ctx.beginPath();
-    ctx.ellipse(8, -1, 1.4, 2.2, 0, 0, 7);
-    ctx.ellipse(12, -1, 1.4, 2.2, 0, 0, 7);
+    ctx.ellipse(8.6, -1.6, 1.7, 3, 0, 0, 7);
+    ctx.ellipse(13.2, -1.6, 1.7, 3, 0, 0, 7);
     ctx.fill();
     ctx.beginPath();
-    ctx.ellipse(10, 4, 2.2, 3, 0, 0, 7);
+    ctx.ellipse(11, 5.2, 2.5, 3.8, 0, 0, 7);
     ctx.fill();
   }
 }
@@ -1405,14 +1510,15 @@ function drawDark() {
   lctx.fillRect(0, 0, viewW, viewH);
   lctx.globalCompositeOperation = "destination-out";
   const punch = (wx, wy, r, power) => {
-    const sx = wx - camX, sy = wy - camY;
-    if (sx < -r || sy < -r || sx > viewW + r || sy > viewH + r) return;
-    const g = lctx.createRadialGradient(sx, sy, r * 0.1, sx, sy, r);
+    const sx = (wx - camX) * VS + frameShakeX, sy = (wy - camY) * VS + frameShakeY;
+    const rr = r * VS;
+    if (sx < -rr || sy < -rr || sx > viewW + rr || sy > viewH + rr) return;
+    const g = lctx.createRadialGradient(sx, sy, rr * 0.1, sx, sy, rr);
     g.addColorStop(0, "rgba(0,0,0," + power + ")");
     g.addColorStop(1, "rgba(0,0,0,0)");
     lctx.fillStyle = g;
     lctx.beginPath();
-    lctx.arc(sx, sy, r, 0, 7);
+    lctx.arc(sx, sy, rr, 0, 7);
     lctx.fill();
   };
   for (const L of lights) punch(L.x, L.y, L.r, 0.9);
@@ -1596,8 +1702,9 @@ function beginMatch() {
     mode = "play";
     show("screen-play");
     resize();
-    camX = player.x - viewW / 2;
-    camY = player.y - viewH * 0.46;
+    const ww = viewW / VS, wh = viewH / VS;
+    camX = player.x - ww / 2;
+    camY = player.y - wh * 0.42;
     lastTs = 0;
     acc = 0;
     audioStart();
@@ -1712,6 +1819,7 @@ function boot() {
   window.addEventListener("blur", () => { keys.clear(); joyOn = false; actionHeld = false; altHeld = false; });
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("resize", resize);
+  if (window.visualViewport) window.visualViewport.addEventListener("resize", resize);
 
   const params = new URLSearchParams(location.search);
   if (params.get("autostart") === "1") beginMatch();
