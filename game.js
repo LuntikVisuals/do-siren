@@ -1056,34 +1056,39 @@ function shade(hex, amt) {
   return "rgb(" + r + "," + g + "," + b + ")";
 }
 
-/* Камера как в вертикали: кусок мира фиксирован, персонажи не сжимаются в точки.
-   Та же идея, что VS в «Заводных кошмарах» (там высота ландшафта / 380),
-   только срез подобран под портрет. */
+/* Горизонтальный срез: на широком экране видно двор, а не весь участок точками. */
 function fitView() {
-  const portrait = viewH + 12 >= viewW;
-  const charPx = portrait ? viewH * 0.058 : Math.min(viewW, viewH) * 0.07;
+  const landscape = viewW + 8 >= viewH;
+  const shortSide = Math.min(viewW, viewH);
+  const charPx = (landscape ? shortSide * 0.115 : shortSide * 0.09);
   VS = charPx / 30;
   let tilesW = viewW / VS / T;
-  if (tilesW < 5.6) VS = viewW / (T * 5.6);
-  if (tilesW > 9.2) VS = viewW / (T * 9.2);
-  const tilesH = viewH / VS / T;
-  if (portrait && tilesH > 13.5) VS = viewH / (T * 13.5);
-  if (!portrait && tilesH < 7.2) VS = viewH / (T * 7.2);
+  if (landscape) {
+    if (tilesW > 16) VS = viewW / (T * 16);
+    if (tilesW < 10.5) VS = viewW / (T * 10.5);
+    const tilesH = viewH / VS / T;
+    if (tilesH < 5.6) VS = viewH / (T * 5.6);
+    if (tilesH > 8.2) VS = viewH / (T * 8.2);
+  } else {
+    if (tilesW > 9) VS = viewW / (T * 9);
+    const tilesH = viewH / VS / T;
+    if (tilesH > 12) VS = viewH / (T * 12);
+  }
   VS = clamp(VS, 0.7, 8);
 }
 
 function resize() {
-  const r = $("app").getBoundingClientRect();
+  const app = $("app");
   dpr = Math.min(2, window.devicePixelRatio || 1);
-  viewW = Math.max(1, r.width);
-  viewH = Math.max(1, r.height);
+  viewW = Math.max(1, app.offsetWidth);
+  viewH = Math.max(1, app.offsetHeight);
   fitView();
   canvas.width = Math.max(1, Math.floor(viewW * dpr));
   canvas.height = Math.max(1, Math.floor(viewH * dpr));
   lightCanvas.width = canvas.width;
   lightCanvas.height = canvas.height;
-  mini.width = 92 * dpr;
-  mini.height = 120 * dpr;
+  mini.width = 120 * dpr;
+  mini.height = 72 * dpr;
 }
 
 function render() {
@@ -1775,8 +1780,13 @@ function boot() {
     const len = Math.hypot(x, y) || 1;
     const cl = Math.min(len, max);
     const nx = x / len * cl, ny = y / len * cl;
-    jx = nx / max; jy = ny / max;
-    knob.style.transform = "translate(" + nx + "px," + ny + "px)";
+    /* Портретный телефон крутит весь #app на -90°. Палец в экранных координатах,
+       стик и ход — в координатах холста. */
+    const turned = window.matchMedia("(orientation: portrait)").matches;
+    const lx = turned ? -ny : nx;
+    const ly = turned ? nx : ny;
+    jx = lx / max; jy = ly / max;
+    knob.style.transform = "translate(" + lx + "px," + ly + "px)";
   };
   joy.addEventListener("pointerdown", (e) => {
     joy.setPointerCapture(e.pointerId);
@@ -1819,6 +1829,7 @@ function boot() {
   window.addEventListener("blur", () => { keys.clear(); joyOn = false; actionHeld = false; altHeld = false; });
   window.addEventListener("contextmenu", (e) => e.preventDefault());
   window.addEventListener("resize", resize);
+  window.addEventListener("orientationchange", () => setTimeout(resize, 60));
   if (window.visualViewport) window.visualViewport.addEventListener("resize", resize);
 
   const params = new URLSearchParams(location.search);

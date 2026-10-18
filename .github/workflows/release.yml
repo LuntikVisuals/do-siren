@@ -72,19 +72,19 @@ jobs:
         working-directory: android
         run: gradle assembleRelease --no-daemon --stacktrace
 
-      - name: Publish v1.0.1
+      - name: Publish v1.0.2
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -f "$APK"
-          cp "$APK" /tmp/do-siren-1.0.1.apk
+          cp "$APK" /tmp/do-siren-1.0.2.apk
           cat > /tmp/notes.md << 'NOTES'
-          До сирен 1.0.1
+          До сирен 1.0.2 — горизонтальная
 
-          Вертикальная камера: персонажи больше не сжимаются в точки на телефоне.
-          Та же подпись, versionCode 2 — ставится поверх 1.0.0.
+          Игра лежит на боку: телефон сам поворачивается в альбомную ориентацию.
+          Та же подпись, versionCode 3 — ставится поверх 1.0.1.
 
           Короткая игра вид сверху. Клён-Хилл, Огайо: дом с двором и особняк.
           Ты и 4 бота. Роль случайная — выживший или киллер.
@@ -92,16 +92,16 @@ jobs:
           Цель живых — дождаться полиции. Щитки ускоряют сирены.
 
           Это фан-трибьют. Все права на персонажей принадлежат их законным владельцам.
-          applicationId com.luntikvisuals.dosiren, versionCode 2, versionName 1.0.1.
+          applicationId com.luntikvisuals.dosiren, versionCode 3, versionName 1.0.2.
           Android 7.0+.
           NOTES
           sed -i 's/^          //' /tmp/notes.md
-          if gh release view v1.0.1 >/dev/null 2>&1; then
-            gh release upload v1.0.1 /tmp/do-siren-1.0.1.apk --clobber
+          if gh release view v1.0.2 >/dev/null 2>&1; then
+            gh release upload v1.0.2 /tmp/do-siren-1.0.2.apk --clobber
           else
-            gh release create v1.0.1 /tmp/do-siren-1.0.1.apk \
+            gh release create v1.0.2 /tmp/do-siren-1.0.2.apk \
               --target main --latest \
-              --title "До сирен v1.0.1" \
+              --title "До сирен v1.0.2" \
               --notes-file /tmp/notes.md
           fi
 

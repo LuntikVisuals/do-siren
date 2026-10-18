@@ -10,7 +10,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 /**
- * Portrait WebView shell. The game is the HTML in assets, drawn by the
+ * Landscape WebView shell. The game is the HTML in assets, drawn by the
  * system browser engine — nothing is downloaded at runtime.
  */
 public class MainActivity extends Activity {
