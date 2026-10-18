@@ -14,12 +14,26 @@ const SAVE_KEY = "dosiren-v1";
 const F_GRASS = 0, F_WOOD = 1, F_MARBLE = 2, F_ROAD = 3, F_WATER = 4;
 const F_CARPET = 5, F_TILE = 6, F_CORN = 7, F_PORCH = 8;
 
+const BODY_R = 11;
+const ATTACK_R = BODY_R * 2 + 4;
+
 const CHARS = {
   michael: { name: "Майкл", role: "Спринтер", color: "#3c6ea5", hair: "#161616", speed: 128, hp: 2, repair: 1, sense: 1, stamina: 0.82, blurb: "Самый быстрый. Рывок кончается раньше." },
   alice: { name: "Алиса", role: "Слух", color: "#c56b8c", hair: "#6a3318", speed: 108, hp: 2, repair: 1, sense: 1.58, stamina: 1, blurb: "Слышит шаги гораздо дальше остальных." },
   daniel: { name: "Дэнил", role: "Руки", color: "#d0863c", hair: "#24180f", speed: 100, hp: 3, repair: 1.5, sense: 1, stamina: 1.08, blurb: "Держит три удара и быстрее чинит щитки." },
-  sarah: { name: "Сара", role: "Бот", color: "#6d8f5c", hair: "#111111", speed: 110, hp: 2, repair: 1.12, sense: 1.12, stamina: 1, blurb: "" },
-  jake: { name: "Джейк", role: "Бот", color: "#8d6a45", hair: "#3a2818", speed: 106, hp: 2, repair: 1.08, sense: 1, stamina: 1, blurb: "" },
+  nora: { name: "Нора", role: "Тихая", color: "#7a6a9a", hair: "#1a1020", speed: 112, hp: 2, repair: 1.05, sense: 1.32, stamina: 1.05, blurb: "В рывке шумит слабее и слышит чуть раньше." },
+  victor: { name: "Виктор", role: "Плечо", color: "#8a3a3a", hair: "#2a140c", speed: 96, hp: 3, repair: 1.2, sense: 0.92, stamina: 1.16, blurb: "Медленный. Три удара и запас дыхания." },
+  lily: { name: "Лили", role: "Глаза", color: "#d0c07a", hair: "#c4a060", speed: 110, hp: 2, repair: 0.92, sense: 1.45, stamina: 0.96, blurb: "Фонарь в голове: видит дальше в темноте." },
+  owen: { name: "Оуэн", role: "Ноги", color: "#3d7a6a", hair: "#201810", speed: 122, hp: 2, repair: 0.86, sense: 1, stamina: 0.94, blurb: "Почти как Майкл, но рывок держит дольше." },
+  ruth: { name: "Рут", role: "Бинт", color: "#c45a4a", hair: "#4a2018", speed: 104, hp: 2, repair: 1.22, sense: 1.08, stamina: 1, blurb: "Быстрее чинит щитки и заматывает рану." },
+  sarah: { name: "Сара", role: "Двор", color: "#6d8f5c", hair: "#111111", speed: 110, hp: 2, repair: 1.12, sense: 1.12, stamina: 1, blurb: "Ровная. И щиток, и кусты знает одинаково." },
+  jake: { name: "Джейк", role: "Двор", color: "#8d6a45", hair: "#3a2818", speed: 106, hp: 2, repair: 1.08, sense: 1, stamina: 1, blurb: "Держится середины. Не герой и не обуза." },
+};
+const ROSTER = Object.keys(CHARS);
+
+const MAPS = {
+  estate: { name: "Клён-Хилл", line: "Дом, двор и особняк." },
+  camp: { name: "Озеро Стоун", line: "Лодж, хижины и причал." },
 };
 
 const KILLERS = {
@@ -38,7 +52,7 @@ const ITEMS = [
 
 const $ = (id) => document.getElementById(id);
 
-let solid, floors, deco, doors, gens, hides, lights, props, patrol;
+let solid, floors, deco, doors, gens, hides, lights, props, patrol, pickups;
 let actors = [];
 let player = null;
 let mode = "lobby";
@@ -72,7 +86,7 @@ const lctx = lightCanvas.getContext("2d");
 
 function defaultSave() {
   return {
-    v: 1, coins: 60, character: "michael", sound: true, nights: 0, wins: 0,
+    v: 1, coins: 60, character: "michael", killer: "random", map: "estate", sound: true, nights: 0, wins: 0,
     owned: { med: false, light: false, map: false, shoes: false, flare: false },
     equipped: { med: false, light: false, map: false, shoes: false, flare: false },
   };
@@ -118,11 +132,19 @@ function shuffle(list) {
 function inb(x, y) { return x > 0 && y > 0 && x < COLS - 1 && y < ROWS - 1; }
 function tileOf(v) { return clamp(Math.floor(v / T), 0, 999); }
 
-function buildWorld() {
+let mapId = "estate";
+
+function freshGrid() {
   solid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
   floors = Array.from({ length: ROWS }, () => Array(COLS).fill(F_GRASS));
   deco = Array.from({ length: ROWS }, () => Array(COLS).fill(""));
   doors = [];
+  hides = [];
+  gens = [];
+  props = [];
+  lights = [];
+  patrol = [];
+  pickups = [];
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       if (x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1) {
@@ -131,6 +153,14 @@ function buildWorld() {
       }
     }
   }
+}
+function buildWorld() {
+  if (mapId === "camp") buildCamp();
+  else buildEstate();
+  assertConnected();
+}
+function buildEstate() {
+  freshGrid();
   carveRoom(5, 1, 24, 16, F_MARBLE, "wallm");
   openTile(23, 16, F_MARBLE);
   openTile(24, 16, F_MARBLE);
@@ -242,7 +272,119 @@ function buildWorld() {
     place(16, 12, "p"), place(14, 24, "p"), place(11, 46, "p"),
     place(30, 40, "p"), place(24, 36, "p"), place(3, 22, "p"),
   ];
-  assertConnected();
+  dropLoot([[9, 22, "med"], [15, 44, "med"], [28, 38, "med"], [19, 26, "flare"]]);
+}
+
+function buildCamp() {
+  freshGrid();
+  carveRoom(3, 2, 16, 13, F_WOOD, "wallh");
+  hwall(4, 8, 14, "wallh");
+  openTile(6, 8, F_WOOD);
+  openTile(12, 8, F_CARPET);
+  openTile(7, 14, F_PORCH);
+  openTile(8, 14, F_PORCH);
+  openTile(11, 14, F_WOOD);
+  addDoor(6, 8, true);
+  addDoor(12, 8, false);
+  addDoor(7, 14, true);
+  addDoor(11, 14, false);
+  fillFloor(4, 3, 6, 4, F_CARPET);
+  fillFloor(11, 3, 6, 4, F_WOOD);
+  for (let x = 5; x <= 12; x++) if (!solid[15][x]) floors[15][x] = F_PORCH;
+
+  carveRoom(22, 3, 10, 9, F_WOOD, "wallh");
+  openTile(26, 11, F_WOOD);
+  addDoor(26, 11, true);
+  fillFloor(23, 4, 8, 6, F_CARPET);
+
+  carveRoom(22, 16, 10, 8, F_WOOD, "wallh");
+  openTile(24, 23, F_WOOD);
+  addDoor(24, 23, false);
+  fillFloor(23, 17, 8, 5, F_TILE);
+
+  carveRoom(4, 28, 12, 11, F_MARBLE, "wallm");
+  openTile(9, 38, F_MARBLE);
+  openTile(8, 33, F_MARBLE);
+  hwall(5, 33, 10, "wallm");
+  addDoor(9, 38, true);
+  addDoor(8, 33, false);
+  fillFloor(5, 29, 10, 3, F_CARPET);
+
+  for (let y = 18; y <= 22; y++) {
+    for (let x = 2; x <= 33; x++) {
+      if (!inb(x, y) || solid[y][x] || floors[y][x] !== F_GRASS) continue;
+      floors[y][x] = F_ROAD;
+      deco[y][x] = "";
+    }
+  }
+
+  for (let y = 32; y <= 50; y++) {
+    for (let x = 28; x <= 34; x++) {
+      if (!inb(x, y)) continue;
+      solid[y][x] = 1;
+      floors[y][x] = F_WATER;
+      deco[y][x] = "pool";
+    }
+  }
+  for (let x = 25; x <= 29; x++) {
+    for (let y = 40; y <= 42; y++) {
+      solid[y][x] = 0;
+      floors[y][x] = F_PORCH;
+      deco[y][x] = "";
+    }
+  }
+
+  for (let y = 24; y <= 50; y++) {
+    for (let x = 16; x <= 21; x++) {
+      if (deco[y][x] === "pool" || floors[y][x] === F_ROAD || floors[y][x] === F_PORCH) continue;
+      floors[y][x] = F_CORN;
+      if (y % 2 === 0 && x % 3 !== 1) {
+        solid[y][x] = 1;
+        deco[y][x] = "corn";
+      } else {
+        solid[y][x] = 0;
+        deco[y][x] = "";
+      }
+    }
+  }
+
+  [[6, 20], [10, 24], [14, 26], [4, 42], [14, 44], [20, 36], [8, 46], [31, 28]].forEach(([x, y]) => {
+    if (inb(x, y) && !solid[y][x] && floors[y][x] === F_GRASS) {
+      solid[y][x] = 1;
+      deco[y][x] = "tree";
+    }
+  });
+
+  const place = (tx, ty, kind) => {
+    const n = nearestOpen(tx, ty);
+    return { kind, tx: n.x, ty: n.y, x: n.x * T + T / 2, y: n.y * T + T / 2 };
+  };
+  hides = [
+    place(5, 4, "closet"), place(14, 4, "bed"), place(6, 10, "closet"),
+    place(24, 5, "bed"), place(28, 18, "closet"), place(24, 20, "bed"),
+    place(6, 30, "closet"), place(12, 36, "bed"),
+    place(12, 42, "bush"), place(14, 16, "bush"), place(18, 44, "corn"),
+  ];
+  gens = [place(14, 5, "gen"), place(6, 36, "gen")].map((g, i) => ({
+    ...g, progress: 0, done: false,
+    name: i === 0 ? "Щиток лоджа" : "Щиток причала",
+  }));
+  props = [
+    place(14, 16, "grill"), place(26, 41, "hoop"), place(4, 24, "mailbox"),
+    place(10, 44, "swing"), place(30, 26, "truck"),
+  ];
+  lights = [
+    { x: 8 * T, y: 6 * T, r: 150, col: "255,206,140" },
+    { x: 26 * T, y: 7 * T, r: 110, col: "255,196,120" },
+    { x: 26 * T, y: 19 * T, r: 100, col: "255,186,110" },
+    { x: 9 * T, y: 32 * T, r: 140, col: "255,210,160" },
+    { x: 27 * T, y: 41 * T, r: 120, col: "140,210,220" },
+  ];
+  patrol = [
+    place(8, 6, "p"), place(16, 20, "p"), place(26, 14, "p"),
+    place(10, 40, "p"), place(26, 41, "p"), place(18, 28, "p"),
+  ];
+  dropLoot([[10, 16, "med"], [25, 8, "med"], [7, 40, "med"], [20, 30, "flare"], [27, 20, "med"]]);
 }
 
 function carveRoom(x, y, w, h, floor, wall) {
@@ -289,10 +431,18 @@ function clearGate(x, y) {
   floors[y][x] = F_GRASS;
 }
 function addDoor(x, y, closed) {
-  openTile(x, y, floors[y][x] === F_GRASS ? F_WOOD : floors[y][x]);
+  const floor = floors[y][x] === F_GRASS ? F_WOOD : floors[y][x];
+  openTile(x, y, floor);
+  let hx = x * T + 4, hy = y * T, dir = 1;
+  if (y > 0 && solid[y - 1][x]) { hx = x * T + 4; hy = y * T; dir = 1; }
+  else if (y + 1 < ROWS && solid[y + 1][x]) { hx = x * T + 4; hy = (y + 1) * T; dir = -1; }
+  else if (x > 0 && solid[y][x - 1]) { hx = x * T; hy = y * T + 4; dir = 1; }
+  else { hx = (x + 1) * T; hy = y * T + 4; dir = -1; }
   doors.push({
     tx: x, ty: y, x: x * T + T / 2, y: y * T + T / 2,
-    state: closed ? "closed" : "open", breakP: 0,
+    state: closed ? "closed" : "open",
+    angle: closed ? 0 : 1.15,
+    breakP: 0, hx, hy, dir,
   });
 }
 function nearestOpen(tx, ty) {
@@ -303,6 +453,16 @@ function nearestOpen(tx, ty) {
     if (d < bd) { bd = d; best = { x, y }; }
   }
   return best;
+}
+function dropLoot(list) {
+  const used = new Set();
+  for (const [tx, ty, kind] of list) {
+    let n = nearestOpen(tx, ty);
+    let guard = 0;
+    while (used.has(n.x + "," + n.y) && guard++ < 12) n = nearestOpen(n.x + 2, n.y + 1);
+    used.add(n.x + "," + n.y);
+    pickups.push({ kind, x: n.x * T + T / 2, y: n.y * T + T / 2, taken: false });
+  }
 }
 function assertConnected() {
   let open = 0;
@@ -333,20 +493,23 @@ function doorAt(x, y) {
   for (const d of doors) if (d.tx === x && d.ty === y) return d;
   return null;
 }
+function doorSealed(d) {
+  if (!d || d.state === "broken") return false;
+  return d.angle < 0.55;
+}
 function bodyBlocked(x, y) {
   if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return true;
   if (solid[y][x]) return true;
-  const d = doorAt(x, y);
-  return !!(d && d.state === "closed");
+  return doorSealed(doorAt(x, y));
 }
 function sightBlocked(x, y) {
   if (x < 0 || y < 0 || x >= COLS || y >= ROWS) return true;
   if (solid[y][x]) return true;
   const d = doorAt(x, y);
-  return !!(d && d.state === "closed");
+  return !!(d && d.state === "closed" && d.angle < 0.35);
 }
 function hitsWorld(a) {
-  const r = 12;
+  const r = BODY_R;
   const x0 = Math.floor((a.x - r) / T), x1 = Math.floor((a.x + r) / T);
   const y0 = Math.floor((a.y - r) / T), y1 = Math.floor((a.y + r) / T);
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -424,8 +587,11 @@ function astar(sx, sy, gx, gy) {
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, ny = y + dy;
       if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS || solid[ny][nx]) continue;
+      const door = doorAt(nx, ny);
+      let step = 1;
+      if (door && door.state === "closed") step = 8;
       const nk = key(nx, ny);
-      const ng = (gScore.get(k) || 0) + 1;
+      const ng = (gScore.get(k) || 0) + step;
       if (ng < (gScore.get(nk) ?? 1e9)) {
         gScore.set(nk, ng);
         prev.set(nk, k);
@@ -442,6 +608,7 @@ function worldFromTile(tx, ty) {
 }
 
 function setupMatch() {
+  mapId = MAPS[save.map] ? save.map : "estate";
   buildWorld();
   particles = [];
   police = POLICE_START;
@@ -451,11 +618,12 @@ function setupMatch() {
   const force = params.get("role");
   youKiller = force === "killer" ? true : force === "survivor" ? false : Math.random() < 0.22;
   const fk = params.get("killer");
-  personaId = KILLERS[fk] ? fk : ["jason", "myers", "scream"][irand(3)];
+  const want = save.killer && save.killer !== "random" ? save.killer : "";
+  personaId = KILLERS[fk] ? fk : (KILLERS[want] ? want : ["jason", "myers", "scream"][irand(3)]);
   const picked = CHARS[save.character] ? save.character : "michael";
-  const rest = shuffle(["michael", "alice", "daniel", "sarah", "jake"].filter((id) => id !== picked));
+  const rest = shuffle(ROSTER.filter((id) => id !== picked));
   const spots = shuffle([
-    worldFromTile(8, 4), worldFromTile(16, 12), worldFromTile(8, 34), worldFromTile(10, 46),
+    worldFromTile(8, 4), worldFromTile(16, 12), worldFromTile(8, 34), worldFromTile(10, 46), worldFromTile(14, 24),
   ]);
   const kSpot = worldFromTile(3, 20);
   actors = [];
@@ -465,18 +633,18 @@ function setupMatch() {
   for (const id of botIds) actors.push(makeSurvivor(id, spots.pop() || worldFromTile(16, 24), true));
   if (!youKiller) actors.push(makeKiller(personaId, kSpot, true));
   player = actors[0];
-  const k = killer();
-  $("reveal-kicker").textContent = youKiller ? "Роль выпала" : "Клён-Хилл · Огайо";
+  const where = MAPS[mapId].name;
+  $("reveal-kicker").textContent = youKiller ? "Роль выпала" : where + " · Огайо";
   $("reveal-title").textContent = youKiller ? "ТЫ\nКИЛЛЕР" : "ТЫ\nЖИВОЙ";
   $("reveal-title").style.whiteSpace = "pre-line";
   if (youKiller) {
     $("reveal-text").textContent = KILLERS[personaId].name + ". " + KILLERS[personaId].blurb + " Не оставь никого к сиренам.";
   } else {
-    $("reveal-text").textContent = "Ты — " + player.name + ". Где-то здесь " + KILLERS[personaId].name + ". Доживи до сирен. Два щитка зовут полицию раньше. Прячься и захлопывай двери.";
+    $("reveal-text").textContent = "Ты — " + player.name + ". Где-то здесь " + KILLERS[personaId].name + ". " + MAPS[mapId].line + " Доживи до сирен. Два щитка зовут полицию раньше. Прячься и захлопывай двери.";
   }
   toast = youKiller ? "Не дай им дождаться сирен" : "Дождись сирен";
   toastT = 3.2;
-  k.abilityCd = 2.2;
+  killer().abilityCd = 2.2;
 }
 
 function makeSurvivor(id, spot, bot) {
@@ -508,7 +676,7 @@ function makeKiller(persona, spot, bot) {
     abilityCd: 2, rage: 0, evil: 0, stalk: 0, stalking: false, shroud: 0, markT: 0,
     vx: 0, vy: 0, kills: 0, searchT: 0,
     path: null, pathAge: 9, pathI: 0, patrolI: 0, stuckT: 0, lastX: spot.x, lastY: spot.y,
-    sprinting: false,
+    sprinting: false, seen: null,
   };
 }
 
@@ -523,7 +691,8 @@ function moveDir(a, dx, dy, dt, wantSprint) {
     sp *= 1.34;
     a.stamina = Math.max(0, a.stamina - dt * 0.36);
     a.sprinting = true;
-    noiseX = a.x; noiseY = a.y; noiseT = 1.15;
+    noiseX = a.x; noiseY = a.y;
+    noiseT = a.id === "nora" ? 0.55 : 1.15;
   } else {
     a.sprinting = false;
     if (a.kind === "survivor") a.stamina = Math.min(1, a.stamina + dt * 0.22 * (a.staminaMax || 1));
@@ -584,8 +753,8 @@ function separate(a, dt) {
     if (b === a || !b.alive || b.hiding) continue;
     let dx = a.x - b.x, dy = a.y - b.y;
     const d = Math.hypot(dx, dy) || 0.001;
-    if (d < 24) {
-      const push = (24 - d) * 3.2 * dt;
+    if (d < BODY_R * 2) {
+      const push = (BODY_R * 2 - d) * 3.2 * dt;
       dx /= d; dy /= d;
       a.x += dx * push;
       if (hitsWorld(a)) a.x -= dx * push;
@@ -685,7 +854,7 @@ function repairTick(a, dt) {
   }
 }
 function healTick(a, dt) {
-  a.healing += dt;
+  a.healing += dt * (a.id === "ruth" ? 1.35 : 1);
   if (a.healing >= 1.45) {
     a.hp = Math.min(a.maxHp, a.hp + 1);
     a.med = 0;
@@ -714,18 +883,19 @@ function lookTarget(k, range) {
 }
 function tryAttack(k) {
   if (k.atkCd > 0 || k.stun > 0 || !k.alive) return;
-  k.atkCd = k.persona === "jason" ? 0.95 : 0.82;
+  k.atkCd = 0.86;
   k.atkAnim = 0.16;
   blip(140, 0.06, "sawtooth", 0.05);
-  let hit = null, bd = 54;
+  let hit = null, bd = ATTACK_R;
   for (const s of actors) {
     if (s.kind !== "survivor" || !s.alive) continue;
     const d = dist(k, s);
-    const limit = s.hiding ? 38 : 54;
-    if (d > limit) continue;
+    if (d > ATTACK_R) continue;
+    if (s.hiding && d > BODY_R * 2) continue;
+    if (!s.hiding && !los(k, s)) continue;
     const ang = Math.atan2(s.y - k.y, s.x - k.x);
     const diff = Math.abs(Math.atan2(Math.sin(ang - k.facing), Math.cos(ang - k.facing)));
-    if (diff > 1.05 && d > 30) continue;
+    if (diff > 1.15 && d > BODY_R * 1.6) continue;
     if (d < bd) { bd = d; hit = s; }
   }
   if (hit) hitSurvivor(hit, k);
@@ -786,15 +956,16 @@ function tickKillerPowers(k, dt) {
       if (k.markT > 1.15) { t.exposed = 9; k.markT = 0; toast = t.name + " под меткой"; toastT = 1.2; }
     } else k.markT = Math.max(0, k.markT - dt);
   }
-  const door = nearestDoor(k, 36);
-  if (door && door.state === "closed") {
-    let rate = k.persona === "jason" ? 1.35 : 0.72;
-    if (k.rage > 0) rate = 5;
+  const door = nearestDoor(k, BODY_R + 10);
+  if (door && door.state === "closed" && door.angle < 0.45) {
+    let rate = k.persona === "jason" ? 0.48 : 0.28;
+    if (k.rage > 0) rate = 1.45;
     door.breakP += dt * rate;
     if (door.breakP >= 1) {
       door.state = "broken";
       door.breakP = 1;
       blip(80, 0.08, "square", 0.05);
+      burst(door.x, door.y, "#6a4e34", 8);
     }
   }
 }
@@ -805,28 +976,59 @@ function updateSurvivorBot(b, dt) {
   if (b.hiding) {
     b.hideT += dt;
     const k = killer();
-    if (k && dist(b, k) > 300 && b.hideT > 2.4) b.hiding = null;
+    const far = !k || dist(b, k) > 280 || k.shroud > 0;
+    if (far && b.hideT > 2.8) b.hiding = null;
     return;
   }
   const k = killer();
   const d = k ? dist(b, k) : 9999;
   const hear = k ? terrorOf(k) * b.sense : 0;
-  const danger = k && k.stun <= 0 && d < Math.max(150, hear) && (los(b, k) || d < 70) && k.shroud <= 0;
-  if (danger && d < 210) {
-    const h = nearestHideSpot(b, 110);
-    if (h && d < 130 && !hideTaken(h, b)) {
-      goToward(b, h.x, h.y, dt, true);
-      if (Math.hypot(b.x - h.x, b.y - h.y) < 28) doHide(b);
-    } else {
-      const ang = Math.atan2(b.y - k.y, b.x - k.x);
-      goToward(b, clamp(b.x + Math.cos(ang) * 140, T, WORLD_W - T), clamp(b.y + Math.sin(ang) * 140, T, WORLD_H - T), dt, d < 150);
-    }
-    botDoors(b, dt);
+  const danger = k && k.stun <= 0 && d < Math.max(140, hear * 0.85) && (los(b, k) || d < 64) && k.shroud <= 0;
+  if (b.med > 0 && b.hp < b.maxHp && !danger && d > 170) {
+    healTick(b, dt);
     return;
   }
-  const g = gens.filter((x) => !x.done).sort((a, c) => dist(b, a) - dist(b, c))[0];
-  if (g) {
-    if (dist(b, g) > 40) goToward(b, g.x, g.y, dt, false);
+  if (danger && d < 220) {
+    const h = nearestHideSpot(b, 140);
+    if (h && d < 150 && !hideTaken(h, b) && dist(b, h) < d) {
+      goToward(b, h.x, h.y, dt, true);
+      if (Math.hypot(b.x - h.x, b.y - h.y) < 24) doHide(b);
+    } else {
+      const ang = Math.atan2(b.y - k.y, b.x - k.x);
+      const side = (b.id === "victor" ? 0.4 : 0.9) * (hash(Math.floor(b.x), Math.floor(b.y)) - 0.5);
+      goToward(b,
+        clamp(b.x + Math.cos(ang + side) * 160, T, WORLD_W - T),
+        clamp(b.y + Math.sin(ang + side) * 160, T, WORLD_H - T),
+        dt, d < 160);
+    }
+    botDoors(b, dt);
+    if (b.flare > 0 && d < 70) doFlare(b);
+    return;
+  }
+  if ((b.med || 0) < 1) {
+    const kit = nearestPickup(b, "med", b.hp < b.maxHp ? 640 : 200);
+    if (kit && !danger) {
+      goToward(b, kit.x, kit.y, dt, b.hp < b.maxHp);
+      botDoors(b, dt);
+      return;
+    }
+  }
+  if ((b.flare || 0) < 1 && !danger) {
+    const pop = nearestPickup(b, "flare", 160);
+    if (pop) {
+      goToward(b, pop.x, pop.y, dt, false);
+      botDoors(b, dt);
+      return;
+    }
+  }
+  const openG = gens.filter((g) => !g.done);
+  openG.sort((a, c) => {
+    const load = (g) => actors.filter((o) => o !== b && o.kind === "survivor" && o.alive && !o.hiding && dist(o, g) < 80).length;
+    return (dist(b, a) + load(a) * 90) - (dist(b, c) + load(c) * 90);
+  });
+  const g = openG[0];
+  if (g && !(k && d < 190 && los(b, k))) {
+    if (dist(b, g) > 36) goToward(b, g.x, g.y, dt, false);
     else repairTick(b, dt);
     botDoors(b, dt);
     return;
@@ -838,41 +1040,63 @@ function updateSurvivorBot(b, dt) {
   goToward(b, b.wander.x, b.wander.y, dt, false);
   botDoors(b, dt);
 }
-function botDoors(a, dt) {
-  const d = nearestDoor(a, 34);
-  if (!d || d.state !== "closed") return;
-  if (a.kind === "survivor") d.state = "open";
-  else {
-    d.breakP += dt * (a.rage > 0 ? 4 : 1);
-    if (d.breakP >= 1) d.state = "broken";
+function nearestPickup(a, kind, r) {
+  let best = null, bd = r;
+  for (const p of pickups) {
+    if (p.taken || p.kind !== kind) continue;
+    const dd = Math.hypot(a.x - p.x, a.y - p.y);
+    if (dd < bd) { bd = dd; best = p; }
   }
+  return best;
+}
+function botDoors(a) {
+  if (a.kind !== "survivor") return;
+  const d = nearestDoor(a, 24);
+  if (!d || d.state === "broken") return;
+  const k = killer();
+  const fleeing = k && k.stun <= 0 && dist(a, k) < 150 && a.alive;
+  if (fleeing && d.state === "open" && dist(a, d) < 18 && dist(k, d) + 8 < dist(a, k)) {
+    d.state = "closed";
+    d.breakP = 0;
+    return;
+  }
+  if (d.state === "closed" && dist(a, d) < 18) d.state = "open";
 }
 function chooseTarget(k) {
   let best = null, score = 1e9;
   for (const s of actors) {
     if (s.kind !== "survivor" || !s.alive) continue;
     const d = dist(k, s);
-    const seen = !s.hiding && d < 320 && los(k, s);
-    const closeHide = s.hiding && d < 42;
-    const heard = !s.hiding && d < 120;
+    const seen = !s.hiding && d < 300 && los(k, s);
+    const closeHide = s.hiding && d < 36;
+    const heard = !s.hiding && noiseT > 0 && Math.hypot(s.x - noiseX, s.y - noiseY) < 28 && d < 160;
     if (!(seen || closeHide || heard)) continue;
-    const sc = d - (s.exposed > 0 ? 90 : 0) - (s.hp < s.maxHp ? 24 : 0);
+    const sc = d - (s.exposed > 0 ? 110 : 0) - (s.hp < s.maxHp ? 28 : 0) - (s.sprinting ? 20 : 0);
     if (sc < score) { score = sc; best = s; }
   }
+  if (best) k.seen = { x: best.x, y: best.y, t: 5.5, hiding: best.hiding };
   return best;
 }
 function updateKillerBot(k, dt) {
   if (k.stun > 0) { k.vx = 0; k.vy = 0; return; }
+  if (k.seen) k.seen.t -= dt;
   const target = chooseTarget(k);
-  if (k.persona === "jason" && target && dist(k, target) < 160 && k.abilityCd <= 0) triggerAbility(k);
-  if (k.persona === "scream" && k.shroud <= 0 && k.abilityCd <= 0 && target && dist(k, target) > 70 && dist(k, target) < 280) triggerAbility(k);
+  const near = actors.filter((s) => s.kind === "survivor" && s.alive && !s.hiding && dist(k, s) < 150 && los(k, s)).length;
+  if (k.persona === "jason" && k.abilityCd <= 0 && (near >= 2 || (target && dist(k, target) < 120))) triggerAbility(k);
+  if (k.persona === "scream" && k.shroud <= 0 && k.abilityCd <= 0 && target && dist(k, target) > 80 && dist(k, target) < 240 && los(k, target)) triggerAbility(k);
   if (k.persona === "myers") {
-    k.stalking = !!(target && k.evil <= 0 && dist(k, target) > 64 && dist(k, target) < 300 && los(k, target));
+    k.stalking = !!(target && k.evil <= 0 && dist(k, target) > 70 && dist(k, target) < 280 && los(k, target));
   }
   if (target) {
     const d = dist(k, target);
-    if (d < (target.hiding ? 40 : 50)) tryAttack(k);
+    const reach = target.hiding ? BODY_R * 2 : ATTACK_R - 2;
+    if (d < reach && los(k, target)) tryAttack(k);
     else goToward(k, target.x, target.y, dt, false);
+  } else if (k.seen && k.seen.t > 0) {
+    const hide = k.seen.hiding || nearestHideSpot(k, 80);
+    if (hide && dist(k, hide) > 20 && k.seen.t > 3) goToward(k, hide.x, hide.y, dt, false);
+    else goToward(k, k.seen.x, k.seen.y, dt, false);
+    if (dist(k, k.seen) < 28) k.seen.t = Math.min(k.seen.t, 1.2);
   } else if (noiseT > 0) {
     goToward(k, noiseX, noiseY, dt, false);
   } else {
@@ -880,7 +1104,6 @@ function updateKillerBot(k, dt) {
     if (dist(k, p) < 36) k.patrolI++;
     goToward(k, p.x, p.y, dt, false);
   }
-  botDoors(k, dt);
 }
 
 function inputVec() {
@@ -941,6 +1164,33 @@ function updatePlayer(dt) {
   }
 }
 
+function tickDoors(dt) {
+  for (const d of doors) {
+    const target = d.state === "open" ? 1.15 : d.state === "broken" ? 0.55 : 0;
+    d.angle += (target - d.angle) * Math.min(1, dt * 9);
+  }
+}
+function takePickup(a) {
+  if (!a.alive || a.hiding) return;
+  for (const p of pickups) {
+    if (p.taken) continue;
+    if (Math.hypot(a.x - p.x, a.y - p.y) > 18) continue;
+    if (p.kind === "med") {
+      if ((a.med || 0) >= 1) continue;
+      a.med = 1;
+    } else if (p.kind === "flare") {
+      if ((a.flare || 0) >= 1) continue;
+      a.flare = 1;
+    } else continue;
+    p.taken = true;
+    if (a === player) {
+      toast = p.kind === "med" ? "Подобрал аптечку" : "Подобрал петарду";
+      toastT = 1.2;
+    }
+    blip(520, 0.05, "sine", 0.04);
+  }
+}
+
 function update(dt) {
   if (mode !== "play") return;
   consumeEdges();
@@ -951,12 +1201,14 @@ function update(dt) {
     if (a.bot && a.kind === "survivor") updateSurvivorBot(a, dt);
     else if (a.bot && a.kind === "killer") updateKillerBot(a, dt);
     else updatePlayer(dt);
+    if (a.kind === "survivor") takePickup(a);
     if (a.bot) noteStuck(a, dt);
     if (a !== player) {
       if (a.iFrame > 0 && a.kind === "killer") a.iFrame -= dt;
     }
     separate(a, dt);
   }
+  tickDoors(dt);
   const k = killer();
   if (k && k.bot) tickKillerPowers(k, dt);
   for (const s of actors) if (s.kind === "survivor" && s.exposed > 0 && s !== player) s.exposed -= dt;
@@ -1128,6 +1380,7 @@ function render() {
   for (const g of gens) drawGen(g);
   for (const h of hides) drawHide(h);
   for (const d of doors) drawDoor(d);
+  for (const p of pickups) drawPickup(p);
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       if (!solid[y][x]) continue;
@@ -1166,7 +1419,24 @@ function drawFloor(x, y) {
   else if (f === F_PORCH) col = "#3a3128";
   ctx.fillStyle = col;
   ctx.fillRect(x * T, y * T, T + 0.5, T + 0.5);
-  if (f === F_ROAD && x === 24) {
+  if (f === F_WOOD || f === F_PORCH) {
+    ctx.strokeStyle = "rgba(0,0,0,.18)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x * T, y * T + 14);
+    ctx.lineTo(x * T + T, y * T + 14);
+    ctx.moveTo(x * T, y * T + 30);
+    ctx.lineTo(x * T + T, y * T + 30);
+    ctx.stroke();
+  } else if (f === F_GRASS && n > 0.72) {
+    ctx.fillStyle = "rgba(80,120,60,.35)";
+    ctx.fillRect(x * T + 8, y * T + 18, 2, 6);
+    ctx.fillRect(x * T + 22, y * T + 10, 2, 5);
+  } else if (f === F_MARBLE) {
+    ctx.strokeStyle = "rgba(240,230,210,.08)";
+    ctx.strokeRect(x * T + 3, y * T + 3, T - 6, T - 6);
+  }
+  if (f === F_ROAD && x % 2 === 0) {
     ctx.fillStyle = "rgba(226,161,90,.35)";
     ctx.fillRect(x * T + T / 2 - 1, y * T + 8, 2, 10);
   }
@@ -1224,19 +1494,51 @@ function drawSolid(x, y) {
   ctx.fillRect(px, py - lip * 0.3, T + 0.5, T);
   ctx.fillStyle = face;
   ctx.fillRect(px, py + T - lip, T + 0.5, lip);
+  ctx.fillStyle = "rgba(255,255,255,.06)";
+  ctx.fillRect(px, py, T + 0.5, 2);
 }
 function drawDoor(d) {
-  if (d.state === "open") return;
-  ctx.fillStyle = d.state === "broken" ? "#2a2018" : "#6a4e34";
-  ctx.fillRect(d.tx * T + 6, d.ty * T + 4, T - 12, T - 8);
-  if (d.state === "closed") {
-    ctx.fillStyle = "#e2a15a";
-    ctx.fillRect(d.x + 6, d.y - 2, 3, 3);
-    if (d.breakP > 0) {
-      ctx.fillStyle = "#c44b3c";
-      ctx.fillRect(d.tx * T + 6, d.ty * T + T - 6, (T - 12) * d.breakP, 3);
-    }
+  ctx.save();
+  ctx.translate(d.hx, d.hy);
+  ctx.rotate((d.dir || 1) * (d.angle || 0));
+  const broken = d.state === "broken";
+  ctx.fillStyle = broken ? "#3a2a22" : "#8d6844";
+  ctx.fillRect(0, -5, T - 10, 10);
+  ctx.fillStyle = broken ? "#2a1c16" : "#5c4030";
+  ctx.fillRect(0, -5, 5, 10);
+  if (!broken) {
+    ctx.fillStyle = "#e8c27a";
+    ctx.fillRect(T - 18, -2, 4, 4);
   }
+  if (d.breakP > 0 && d.state === "closed") {
+    ctx.fillStyle = "#c44b3c";
+    ctx.fillRect(6, 2, (T - 22) * Math.min(1, d.breakP), 2);
+  }
+  ctx.restore();
+}
+function drawPickup(p) {
+  if (p.taken) return;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.fillStyle = "rgba(0,0,0,.35)";
+  ctx.beginPath();
+  ctx.ellipse(0, 6, 7, 3, 0, 0, 7);
+  ctx.fill();
+  if (p.kind === "med") {
+    ctx.fillStyle = "#f4f4f2";
+    ctx.fillRect(-6, -6, 12, 12);
+    ctx.fillStyle = "#c44b3c";
+    ctx.fillRect(-2, -5, 4, 10);
+    ctx.fillRect(-5, -2, 10, 4);
+  } else {
+    ctx.fillStyle = "#e2a15a";
+    ctx.fillRect(-2, -8, 4, 12);
+    ctx.fillStyle = "#ffd27a";
+    ctx.beginPath();
+    ctx.arc(0, -8, 3, 0, 7);
+    ctx.fill();
+  }
+  ctx.restore();
 }
 function drawHide(h) {
   const x = h.x, y = h.y;
@@ -1400,12 +1702,17 @@ function drawHair(a) {
   } else if (a.id === "jake") {
     ctx.beginPath(); ctx.arc(0, -1, 6.6, Math.PI, Math.PI * 2); ctx.fill();
     ctx.fillRect(-6.2, -1.5, 12.4, 3);
+  } else if (a.id === "nora" || a.id === "lily" || a.id === "ruth") {
+    ctx.beginPath(); ctx.ellipse(-6, 0, 4.6, 6.4, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, 0, 6.5, Math.PI * 0.45, Math.PI * 1.55); ctx.fill();
+  } else if (a.id === "victor" || a.id === "owen") {
+    ctx.beginPath(); ctx.arc(-1, -1, 6.8, Math.PI * 0.85, Math.PI * 2.15); ctx.fill();
   } else {
     ctx.beginPath(); ctx.arc(0, -1, 6.6, Math.PI * 0.9, Math.PI * 2.1); ctx.fill();
   }
 }
 function drawKillerBody(a) {
-  const S = a.persona === "scream" ? 1.82 : 1.72;
+  const S = 1.45;
   ctx.save();
   ctx.scale(S, S);
   ctx.fillStyle = "rgba(0,0,0,.48)";
@@ -1416,17 +1723,17 @@ function drawKillerBody(a) {
   const step = Math.sin(a.step) * 3.6;
   const col = a.persona === "jason" ? "#1c3a2c" : a.persona === "myers" ? "#1a1c24" : "#0c0c10";
   ctx.fillStyle = shade(col, -0.4);
-  ctx.beginPath(); ctx.ellipse(step, -8.5, 5.2, 3.5, 0, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-step, 8.5, 5.2, 3.5, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(step, -5.4, 3.7, 2.6, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-step, 5.4, 3.7, 2.6, 0, 0, 7); ctx.fill();
   ctx.fillStyle = col;
   ctx.beginPath();
-  ctx.ellipse(-2, 0, a.persona === "scream" ? 13 : 12, a.persona === "scream" ? 16 : 14.5, 0, 0, 7);
+  ctx.ellipse(-1, 0, 8, 11, 0, 0, 7);
   ctx.fill();
   ctx.fillStyle = shade(col, -0.22);
-  ctx.beginPath(); ctx.ellipse(-5, 0, 7.5, 11, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-3.2, 0, 5, 9, 0, 0, 7); ctx.fill();
   ctx.fillStyle = shade(col, -0.05);
-  ctx.beginPath(); ctx.arc(7, 12, 4.3, 0, 7); ctx.fill();
-  ctx.beginPath(); ctx.arc(7, -12, 4.3, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(6, 7.6, 2.5, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.arc(6.6, -6.4, 2.5, 0, 7); ctx.fill();
   const ext = a.atkAnim > 0 ? 30 : 21;
   ctx.strokeStyle = "#d5d8dc";
   ctx.lineWidth = 2.2;
@@ -1527,7 +1834,7 @@ function drawDark() {
     lctx.fill();
   };
   for (const L of lights) punch(L.x, L.y, L.r, 0.9);
-  const pr = player.kind === "killer" ? 180 : player.light ? 250 : 156;
+  const pr = player.kind === "killer" ? 180 : player.light ? 250 : (player.id === "lily" ? 210 : 156);
   punch(player.x, player.y, pr, 1);
   if (player.kind === "survivor") {
     const k = killer();
@@ -1627,6 +1934,9 @@ function show(id) {
 function paintLobbyBits() {
   $("coin-pill").textContent = String(save.coins);
   $("who-pill").textContent = CHARS[save.character].name;
+  const kn = save.killer === "random" || !KILLERS[save.killer] ? "Случайный" : KILLERS[save.killer].name.split(" ")[0];
+  $("killer-pill").textContent = kn === "Джейсон" || kn === "Майкл" || kn === "Крик" ? kn : kn;
+  $("map-pill").textContent = (MAPS[save.map] || MAPS.estate).name;
   $("record").textContent = "Ночей: " + (save.nights || 0) + " · дождался: " + (save.wins || 0);
   $("sound").textContent = "Звук: " + (save.sound ? "вкл" : "выкл");
 }
@@ -1673,7 +1983,7 @@ function renderShop() {
 function renderChars() {
   const list = $("char-list");
   list.innerHTML = "";
-  for (const id of ["michael", "alice", "daniel"]) {
+  for (const id of ROSTER) {
     const c = CHARS[id];
     const card = document.createElement("article");
     card.className = "card";
@@ -1690,6 +2000,48 @@ function renderChars() {
     const p = document.createElement("p");
     p.textContent = c.blurb;
     card.append(h, sw, btn, p);
+    list.append(card);
+  }
+}
+function renderKillers() {
+  const list = $("killer-list");
+  list.innerHTML = "";
+  const ids = ["random", "jason", "myers", "scream"];
+  for (const id of ids) {
+    const card = document.createElement("article");
+    card.className = "card";
+    const h = document.createElement("h3");
+    h.textContent = id === "random" ? "Случайный" : KILLERS[id].name;
+    const btn = document.createElement("button");
+    btn.className = "buy" + (save.killer === id ? " on" : "");
+    btn.type = "button";
+    btn.textContent = save.killer === id ? "Выбран" : "Выбрать";
+    btn.onclick = () => { save.killer = id; persist(); paintLobbyBits(); renderKillers(); };
+    const p = document.createElement("p");
+    p.textContent = id === "random"
+      ? "В начале ночи выпадает Джейсон, Майерс или Крик."
+      : KILLERS[id].ability + ". " + KILLERS[id].blurb;
+    card.append(h, btn, p);
+    list.append(card);
+  }
+}
+function renderMaps() {
+  const list = $("map-list");
+  list.innerHTML = "";
+  for (const id of ["estate", "camp"]) {
+    const m = MAPS[id];
+    const card = document.createElement("article");
+    card.className = "card";
+    const h = document.createElement("h3");
+    h.textContent = m.name;
+    const btn = document.createElement("button");
+    btn.className = "buy" + (save.map === id ? " on" : "");
+    btn.type = "button";
+    btn.textContent = save.map === id ? "Выбрана" : "Выбрать";
+    btn.onclick = () => { save.map = id; persist(); paintLobbyBits(); renderMaps(); };
+    const p = document.createElement("p");
+    p.textContent = m.line + (id === "estate" ? " Особняк, дом, кукуруза и бассейн." : " Лодж, две хижины, часовня и озеро.");
+    card.append(h, btn, p);
     list.append(card);
   }
 }
@@ -1743,14 +2095,20 @@ function boot() {
   paintLobbyBits();
   renderShop();
   renderChars();
+  renderKillers();
+  renderMaps();
   resize();
   requestAnimationFrame(loop);
 
   $("play").onclick = () => beginMatch();
   $("to-shop").onclick = () => { renderShop(); show("screen-shop"); };
   $("to-chars").onclick = () => { renderChars(); show("screen-chars"); };
+  $("to-killers").onclick = () => { renderKillers(); show("screen-killers"); };
+  $("to-maps").onclick = () => { renderMaps(); show("screen-maps"); };
   $("shop-back").onclick = () => show("screen-lobby");
   $("char-back").onclick = () => show("screen-lobby");
+  $("killer-back").onclick = () => show("screen-lobby");
+  $("map-back").onclick = () => show("screen-lobby");
   $("open-rights").onclick = () => $("rights").classList.add("on");
   $("rights-back").onclick = () => $("rights").classList.remove("on");
   $("sound").onclick = () => {

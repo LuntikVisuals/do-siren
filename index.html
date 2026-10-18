@@ -78,7 +78,7 @@
     background: none; border: 0; padding: 0; color: var(--amber); font-size: 11px;
     letter-spacing: .06em; text-decoration: underline;
   }
-  #screen-shop, #screen-chars, #screen-reveal {
+  #screen-shop, #screen-chars, #screen-killers, #screen-maps, #screen-reveal {
     background: #100e0c;
     padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
     overflow: auto; touch-action: pan-y;
@@ -224,6 +224,8 @@
         <button class="btn primary" id="play" type="button">Играть <small>ночь</small></button>
         <button class="btn" id="to-shop" type="button">Магазин <small id="coin-pill">60</small></button>
         <button class="btn" id="to-chars" type="button">Персонажи <small id="who-pill">Майкл</small></button>
+        <button class="btn" id="to-killers" type="button">Киллер <small id="killer-pill">Случайный</small></button>
+        <button class="btn" id="to-maps" type="button">Карта <small id="map-pill">Клён-Хилл</small></button>
       </div>
       <div class="meta-row"><span id="record">Ночей: 0</span><button class="ghost" id="sound" type="button">Звук: вкл</button></div>
       <details>
@@ -241,8 +243,20 @@
 
   <section id="screen-chars" class="screen">
     <div class="topbar"><h2>ЛЮДИ</h2><button class="ghost" id="char-back" type="button">Назад</button></div>
-    <p class="lede">Играешь за одного из троих. Сара и Джейк всегда приходят ботами.</p>
+    <p class="lede">Десять человек. Ночью с тобой выходят ещё трое живых, если ты не киллер.</p>
     <div class="list" id="char-list"></div>
+  </section>
+
+  <section id="screen-killers" class="screen">
+    <div class="topbar"><h2>КИЛЛЕР</h2><button class="ghost" id="killer-back" type="button">Назад</button></div>
+    <p class="lede">Кого выпускать на участок. Случайный — как раньше, жребий в начале ночи.</p>
+    <div class="list" id="killer-list"></div>
+  </section>
+
+  <section id="screen-maps" class="screen">
+    <div class="topbar"><h2>КАРТА</h2><button class="ghost" id="map-back" type="button">Назад</button></div>
+    <p class="lede">Оба места в Огайо. Предметы лежат на полу: аптечки и петарды.</p>
+    <div class="list" id="map-list"></div>
   </section>
 
   <section id="screen-reveal" class="screen">
