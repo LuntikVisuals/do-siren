@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#07060a">
+<title>До сирен</title>
+<style>
+  :root {
+    --ink: #07060a;
+    --paper: #f0e2c8;
+    --amber: #e2a15a;
+    --blood: #8e2f2f;
+    --blood-2: #c44b3c;
+    --night: #121820;
+    --line: rgba(226, 161, 90, 0.45);
+    --serif: Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; background: var(--ink); color: var(--paper);
+    font-family: var(--sans); overflow: hidden; touch-action: none;
+  }
+  button, summary { font-family: inherit; }
+  #app {
+    width: min(100vw, 520px); height: 100dvh; margin: 0 auto; position: relative;
+    overflow: hidden; background: var(--night);
+    box-shadow: 0 0 0 1px rgba(226,161,90,.12);
+  }
+  .screen { position: absolute; inset: 0; display: none; flex-direction: column; }
+  .screen.on { display: flex; }
+  #screen-lobby {
+    padding: calc(22px + env(safe-area-inset-top)) 22px calc(16px + env(safe-area-inset-bottom));
+    background:
+      radial-gradient(90px 90px at 78% 9%, rgba(240,226,200,.55), rgba(240,226,200,0) 70%),
+      radial-gradient(180px 80px at 78% 12%, rgba(226,161,90,.18), transparent 70%),
+      linear-gradient(180deg, #1a2230 0%, #14110f 42%, #0c0d10 100%);
+  }
+  .eyebrow {
+    letter-spacing: .28em; text-transform: uppercase; font-size: 11px;
+    color: var(--amber); margin: 8px 0 0;
+  }
+  h1 {
+    font-family: var(--serif); font-weight: 600; letter-spacing: .2em;
+    font-size: 42px; line-height: .95; margin: 10px 0 0;
+  }
+  .lede { margin: 12px 0 0; max-width: 28ch; color: rgba(240,226,200,.78); line-height: 1.45; font-size: 15px; }
+  .skyline { margin-top: auto; height: 168px; width: calc(100% + 44px); margin-left: -22px; display: block; }
+  .menu { display: flex; flex-direction: column; gap: 10px; margin-top: 22px; }
+  .btn {
+    appearance: none; border: 1px solid var(--line); background: rgba(8,6,8,.55);
+    color: var(--paper); min-height: 54px; padding: 0 16px; letter-spacing: .16em;
+    text-transform: uppercase; font-size: 15px; border-radius: 2px; text-align: left;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .btn:active { background: var(--amber); color: #1a100c; }
+  .btn small { letter-spacing: .08em; opacity: .7; font-size: 11px; }
+  .btn.primary { background: #2a140f; border-color: var(--amber); }
+  .meta-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 14px; font-size: 13px; color: rgba(240,226,200,.72); }
+  details { margin-top: 12px; color: rgba(240,226,200,.8); font-size: 14px; line-height: 1.45; }
+  summary { cursor: pointer; letter-spacing: .08em; text-transform: uppercase; font-size: 12px; color: var(--amber); }
+  .fine {
+    margin-top: 10px; font-size: 11px; line-height: 1.4; color: rgba(240,226,200,.48);
+  }
+  .fine button {
+    background: none; border: 0; padding: 0; color: var(--amber); font-size: 11px;
+    letter-spacing: .06em; text-decoration: underline;
+  }
+  #screen-shop, #screen-chars, #screen-reveal {
+    background: #100e0c;
+    padding: calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom));
+    overflow: auto; touch-action: pan-y;
+  }
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .topbar h2 { font-family: var(--serif); letter-spacing: .14em; font-size: 22px; margin: 0; font-weight: 600; }
+  .ghost {
+    background: transparent; color: var(--paper); border: 1px solid var(--line);
+    min-height: 40px; padding: 0 12px; letter-spacing: .12em; text-transform: uppercase; font-size: 12px;
+  }
+  .list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+  .card {
+    border: 1px solid rgba(240,226,200,.16); padding: 12px 12px 10px; background: #181410;
+    display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center;
+  }
+  .card h3 { margin: 0; font-family: var(--serif); font-size: 20px; letter-spacing: .04em; }
+  .card p { margin: 0; grid-column: 1 / -1; color: rgba(240,226,200,.7); font-size: 13px; line-height: 1.4; }
+  .card .buy { min-height: 40px; padding: 0 10px; letter-spacing: .08em; text-transform: uppercase; font-size: 12px;
+    border: 1px solid var(--amber); background: transparent; color: var(--amber); }
+  .card .buy.on { background: var(--amber); color: #1a100c; }
+  .card .buy:disabled { opacity: .4; }
+  .swatch { width: 18px; height: 28px; border-radius: 8px 8px 4px 4px; justify-self: end; }
+  #screen-reveal { align-items: flex-start; justify-content: flex-end; padding-bottom: 48px;
+    background:
+      radial-gradient(120px 80px at 50% 18%, rgba(240,226,200,.2), transparent 70%),
+      #09080b;
+  }
+  #screen-reveal h2 { font-family: var(--serif); font-size: 40px; letter-spacing: .12em; line-height: .95; margin: 0 0 8px; }
+  #screen-reveal .who { color: var(--amber); letter-spacing: .18em; text-transform: uppercase; font-size: 13px; margin: 0 0 12px; }
+  #screen-reveal p { margin: 0; line-height: 1.45; color: rgba(240,226,200,.82); max-width: 34ch; }
+  #tap-hint { margin-top: 18px; font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: rgba(240,226,200,.45); }
+  #screen-play { background: #07080a; }
+  #screen-play.on { display: block; }
+  #c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud {
+    position: absolute; left: 12px; right: 12px; top: calc(8px + env(safe-area-inset-top));
+    display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: start;
+    pointer-events: none; text-shadow: 0 1px 2px #000;
+  }
+  #hud button { pointer-events: auto; }
+  .quit {
+    justify-self: start; background: rgba(0,0,0,.35); color: rgba(240,226,200,.8);
+    border: 1px solid rgba(240,226,200,.2); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; min-height: 32px; padding: 0 8px;
+  }
+  #timer-wrap { text-align: center; }
+  #timer { font-family: var(--serif); font-size: 28px; letter-spacing: .08em; line-height: 1; }
+  #gens, #rolechip { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+  #hearts { justify-self: end; letter-spacing: .2em; font-size: 16px; }
+  #toast {
+    position: absolute; left: 70px; right: 70px; top: 128px; text-align: center;
+    font-size: 14px; letter-spacing: .04em; color: var(--paper);
+    text-shadow: 0 1px 2px #000; pointer-events: none;
+  }
+  #mini {
+    position: absolute; top: calc(78px + env(safe-area-inset-top)); right: 10px;
+    width: 92px; height: 120px; border: 1px solid rgba(240,226,200,.35);
+    background: rgba(0,0,0,.45); display: none;
+  }
+  #meters {
+    position: absolute; left: 14px; top: calc(78px + env(safe-area-inset-top));
+    width: 112px; pointer-events: none;
+  }
+  .bar { height: 6px; background: rgba(0,0,0,.45); border: 1px solid rgba(240,226,200,.25); margin-top: 4px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--amber); }
+  .bar > i.blood { background: var(--blood-2); }
+  #meters span { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: rgba(240,226,200,.75); }
+  #controls {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 188px;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding: 0 16px calc(14px + env(safe-area-inset-bottom));
+    pointer-events: none;
+  }
+  #joy {
+    pointer-events: auto; width: 128px; height: 128px; border-radius: 50%;
+    border: 1px solid rgba(240,226,200,.35); background: rgba(0,0,0,.28);
+    position: relative; touch-action: none;
+  }
+  #knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border-radius: 50%; background: rgba(240,226,200,.88);
+  }
+  .pad { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; pointer-events: auto; }
+  .round {
+    width: 76px; height: 76px; border-radius: 50%; border: 1px solid var(--amber);
+    background: rgba(20,10,8,.72); color: var(--paper); letter-spacing: .08em;
+    text-transform: uppercase; font-size: 11px; line-height: 1.15;
+  }
+  .round.big { width: 92px; height: 92px; background: rgba(90,24,18,.78); font-size: 13px; }
+  .round:active { background: var(--amber); color: #1a100c; }
+  #result {
+    position: absolute; inset: 0; display: none; flex-direction: column; justify-content: flex-end;
+    padding: 22px 20px calc(22px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(0,0,0,.1), rgba(0,0,0,.82) 55%);
+  }
+  #result.on { display: flex; }
+  #result h2 { font-family: var(--serif); letter-spacing: .14em; font-size: 36px; margin: 0 0 8px; }
+  #result p { margin: 0 0 8px; line-height: 1.4; }
+  #result .menu { margin-top: 12px; }
+  #rights {
+    position: absolute; inset: 0; background: rgba(6,5,7,.94); padding: 22px;
+    overflow: auto; display: none; flex-direction: column; gap: 12px; touch-action: pan-y;
+  }
+  #rights.on { display: flex; }
+  #rights p { margin: 0; line-height: 1.5; font-size: 14px; color: rgba(240,226,200,.86); }
+  #fatal {
+    display: none; position: absolute; inset: 0; padding: 20px; background: #1a0808; color: #ffd0c8;
+    white-space: pre-wrap; overflow: auto; z-index: 5; font-size: 13px;
+  }
+  .kb {
+    display: none; position: absolute; left: 14px; right: 14px;
+    bottom: calc(196px + env(safe-area-inset-bottom));
+    margin: 0; text-align: center; pointer-events: none;
+    font-size: 12px; letter-spacing: .04em; color: rgba(240,226,200,.7);
+    text-shadow: 0 1px 2px #000;
+  }
+  @media (pointer: fine) { .kb { display: block; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <section id="screen-lobby" class="screen on">
+    <p class="eyebrow">Клён-Хилл, Огайо</p>
+    <h1>ДО<br>СИРЕН</h1>
+    <p class="lede">Дом, двор и особняк. Ты и четверо других. Одна роль выпадает случайно — дожить до полиции или не дать им дожить.</p>
+    <div class="menu">
+      <button class="btn primary" id="play" type="button">Играть <small>ночь</small></button>
+      <button class="btn" id="to-shop" type="button">Магазин <small id="coin-pill">60</small></button>
+      <button class="btn" id="to-chars" type="button">Персонажи <small id="who-pill">Майкл</small></button>
+    </div>
+    <div class="meta-row"><span id="record">Ночей: 0</span><button class="ghost" id="sound" type="button">Звук: вкл</button></div>
+    <details>
+      <summary>Как играть</summary>
+      <p>Выжившие чинят два щитка — полиция приедет раньше — прячутся и захлопывают двери. Киллер не должен оставить никого к сиренам. Джейсон бьёт яростью, Майерс копит взгляд, Крик исчезает и метит.</p>
+    </details>
+    <svg class="skyline" viewBox="0 0 520 180" aria-hidden="true">
+      <rect width="520" height="180" fill="none"/>
+      <path d="M0 150 H520" stroke="#e2a15a" stroke-opacity=".35"/>
+      <path d="M28 150 V118 H48 V96 H70 V118 H96 V78 H112 V118 H138 V128 H150 V150" fill="#1b140f" stroke="#e2a15a" stroke-opacity=".55"/>
+      <rect x="58" y="104" width="8" height="10" fill="#e2a15a"/>
+      <rect x="102" y="96" width="6" height="8" fill="#f0e2c8"/>
+      <path d="M250 150 V70 H270 V48 H360 V70 H392 V96 H420 V150" fill="#14181e" stroke="#f0e2c8" stroke-opacity=".45"/>
+      <rect x="286" y="86" width="14" height="18" fill="#e2a15a"/>
+      <rect x="312" y="86" width="14" height="18" fill="#c44b3c" fill-opacity=".8"/>
+      <rect x="338" y="86" width="14" height="18" fill="#e2a15a"/>
+      <path d="M300 48 V28 H318 V48" fill="#2a3038"/>
+    </svg>
+    <p class="fine">Фан-трибьют. Все права на персонажей принадлежат их законным владельцам. <button id="open-rights" type="button">Полный текст</button></p>
+  </section>
+
+  <section id="screen-shop" class="screen">
+    <div class="topbar"><h2>МАГАЗИН</h2><button class="ghost" id="shop-back" type="button">Назад</button></div>
+    <p class="lede" id="shop-coins"></p>
+    <div class="list" id="shop-list"></div>
+  </section>
+
+  <section id="screen-chars" class="screen">
+    <div class="topbar"><h2>ЛЮДИ</h2><button class="ghost" id="char-back" type="button">Назад</button></div>
+    <p class="lede">Играешь за одного из троих. Сара и Джейк всегда приходят ботами.</p>
+    <div class="list" id="char-list"></div>
+  </section>
+
+  <section id="screen-reveal" class="screen">
+    <p class="who" id="reveal-kicker">Клён-Хилл</p>
+    <h2 id="reveal-title">РОЛЬ</h2>
+    <p id="reveal-text"></p>
+    <div id="tap-hint">Коснись, чтобы выйти на участок</div>
+  </section>
+
+  <section id="screen-play" class="screen">
+    <canvas id="c"></canvas>
+    <canvas id="mini"></canvas>
+    <div id="hud">
+      <button class="quit" id="quit" type="button">Сдаться</button>
+      <div id="timer-wrap"><div id="timer">2:00</div><div id="gens">Щитки 0/2</div></div>
+      <div id="hearts"></div>
+    </div>
+    <div id="meters"><span id="meter-label">Рывок</span><div class="bar"><i id="meter-fill"></i></div></div>
+    <div id="toast"></div>
+    <div id="controls">
+      <div id="joy" aria-label="Движение"><div id="knob"></div></div>
+      <div class="pad">
+        <button class="round" id="btn-alt" type="button">Рывок</button>
+        <button class="round big" id="btn-main" type="button">Действие</button>
+      </div>
+    </div>
+    <div id="result">
+      <h2 id="result-title"></h2>
+      <p id="result-line"></p>
+      <p id="result-coins"></p>
+      <p class="fine" id="result-note"></p>
+      <div class="menu">
+        <button class="btn primary" id="again" type="button">Ещё ночь</button>
+        <button class="btn" id="to-lobby" type="button">В лобби</button>
+      </div>
+    </div>
+    <p class="kb" id="kb-hint">WASD — ход, Shift — рывок, E — действие, F — способность, пробел — удар</p>
+  </section>
+
+  <section id="rights">
+    <div class="topbar"><h2>ПРАВА</h2><button class="ghost" id="rights-back" type="button">Закрыть</button></div>
+    <p>«До сирен» — независимый бесплатный фан-трибьют, а не официальный продукт. Джейсон Вурхиз, Майкл Майерс и убийца из «Крика» (в том числе образ, известный как Ghostface) — чужие персонажи. Все права на эти имена, образы, маски, фильмы и товарные знаки, включая Friday the 13th, Halloween и Scream, принадлежат их законным правообладателям.</p>
+    <p>Проект не связан с правообладателями, не одобрен ими и ничего у них не просит. Здесь нет кадров, музыки и логотипов из фильмов — только короткая игра про ночь в вымышленном Клён-Хилл, штат Огайо: дом, двор и особняк, случайная роль, ожидание полиции. Код, карта и правила принадлежат автору фанатской версии.</p>
+  </section>
+  <pre id="fatal"></pre>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
